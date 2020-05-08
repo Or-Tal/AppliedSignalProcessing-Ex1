@@ -1,4 +1,4 @@
-from EX1_APSP_UTILS import *
+from ex1_utils import *
 import matplotlib.pyplot as plt
 
 AIRPLANE = "airplane.wav"
@@ -86,17 +86,17 @@ def Q2():
         tmp = []
         for j in np.arange(N):
             tmp.append(10 * np.log10((Cn[i][j] / wstar_norm_sq)))
-        plt.plot(np.arange(N), tmp, c=colors[i])
+        plt.plot(np.arange(N), np.asarray(tmp).flatten(), c=colors[i])
     plt.xlabel("iteration num")
     plt.ylabel("10 log_10 scale error norm")
     plt.ylim(top=20)
     plt.grid()
-    plt.title("10 log_10 scale error norm as a function of iteration, according to $μ ̃$ value")
-    plt.legend(["$μ ̃$={}".format(M[i]) for i in range(K)])
+    plt.title("10 log_10 scale error norm as a function of iteration, according to μ value")
+    plt.legend(["μ ={}".format(M[i]) for i in range(K)])
     plt.show()
 
 
-def Q3():
+def Q3(play=False):
     alpha, sigma, t = 0.9, 0.5, 10
     L = [1, 2, 4]
     Mu = [0.01, 0.001, 0.0001]
@@ -129,16 +129,14 @@ def Q3():
                           ylabel="relative error in db")
             axs[i, j].legend(["coefficient err", "cumulative err mean line", "cumulative NRdb"])
 
-            play_audio(signal[l:100000 + l], 48000)
-            play_audio(signal[l:100000 + l] - predictions[:100000].flatten(), 48000)
-
+            if play:
+                play_audio(signal[l:100000 + l], 48000)
+                play_audio(signal[l:100000 + l] - predictions[:100000].flatten(), 48000)
     plt.show()
 
 
 def Q4():
-    # section 1
     lam, L, alpha, sigma, t, reps, step = 0.99, 2, 0.9, 0.5, 10, 3, 1200
-
     signal = gen_wss_signal(alpha, sigma, t, 48, 's', 'khz')  # initiate the signal
     Delta = np.linspace(1e-5, 5, reps * 2)
     Delta[-1] = 100
@@ -146,6 +144,8 @@ def Q4():
     calc_p2 = calc_P2(signal[:5])
     fig, axs = plt.subplots(2, reps, figsize=(16, 8))
     print("Q4 section 1")
+
+    # predict for first 10 samples - test init influence of delta
     i, j = 0, 0
     for d in Delta:
         if j == reps:
@@ -168,11 +168,10 @@ def Q4():
         axs[i, j].legend(["coefficient err", "cumulative err mean line"])
 
         j += 1
-
     plt.show()
 
+    # repeat for the whole signal
     fig, axs = plt.subplots(2, reps, figsize=(16, 8))
-    print("Q4 section 1")
     i, j = 0, 0
     for d in Delta:
         if j == reps:
@@ -203,74 +202,15 @@ def Q4():
     plt.show()
 
 
-def Q5(play=True):
-    trivial_est = np.ones(1)
-    sounds_compare = []
-    for sound in [CITY, CAFE, AIRPLANE, VACCUM]:
-        trivials, RLS_out, LMS_out = [], [], []
-        N = 400000
-        signal = read_audio_file("{}/{}".format(DIR, sound))[:N]
-        trivial_estimated_signal = signal - predict(signal, trivial_est)
-        trivials.append(trivial_estimated_signal)
-        step = 1500
-
-        fig, axs = plt.subplots(5, 3, figsize=(30, 40))
-        for k, L in enumerate([2, 4, 8, 20, 30]):
-            line_RLS = []
-            for i, lam in enumerate([0.3, 0.6, 0.99]):
-                predictions, coefficients = RLS(signal, L, lam=lam)
-                audio = signal.flatten() - predictions.flatten()
-                line_RLS.append(audio)
-                if play:
-                    print("playing benchmark")
-                    play_audio(trivial_estimated_signal[:N], 48000)
-                    print("playing RLS L={} lambda={}".format(L, lam))
-                    play_audio(audio[:N], 48000)
-                    print("done")
-                mse_ = mse(signal[500:], predictions[500:])
-                nrdb = NRdb(signal[500:], predictions[500:])
-                axs[k, i].plot(np.arange(500, audio.shape[0], step), audio[500::step], c='red')
-                axs[k, i].set_title("{}, RLS, L = {}, lam = {}\n"
-                                    "NRdb = {}, MSE = {}".format(sound, L, lam, np.round(nrdb, 3), np.round(mse_, 6)), fontsize=22)
-                axs[k, i].grid()
-            RLS_out.append(line_RLS)
-        plt.show()
-
-        fig, axs = plt.subplots(4, 5, figsize=(30, 20))
-        for k, L in enumerate(range(1, 5)):
-            line_LMS = []
-            for i, mu in enumerate([0.1, 0.05, 0.01, 0.005, 0.001]):
-                coefficients, predictions = LMS(signal, mu, L)
-                audio = signal.flatten()[L:] - predictions.flatten()
-                line_LMS.append(audio)
-                if play:
-                    print("playing benchmark")
-                    play_audio(trivial_estimated_signal[:N], 48000)
-                    print("playing LMS L={} mu={}".format(L, mu))
-                    play_audio(audio[:N], 48000)
-                    print("done")
-                mse_ = mse(signal[L + 500:], predictions[500:])
-                nrdb = NRdb(signal[L + 500:], predictions[500:])
-                axs[k, i].plot(np.arange(500, audio.shape[0], step), audio[500::step], c='red')
-                axs[k, i].set_title("{}, LMS, L = {}, mu = {}\n"
-                                    "NRdb = {}, MSE = {}".format(sound, L, mu, np.round(nrdb, 3), np.round(mse_, 6)), fontsize=22)
-                axs[k, i].grid()
-
-            LMS_out.append(line_LMS)
-        plt.show()
-
-        sounds_compare.append([trivials, LMS_out, RLS_out])
-    return sounds_compare
-
-
 def Q5_results():
-    # after preforming some experiments chose the best values for each plot
-    best_LMS_ARGS = [(3, 0.1, 35000), (3, 0.1, 40000), (3, 0.1, 40000), (4, 0.1, 4000)]
-    best_RLS_ARGS = [(8, 0.99, 100), (20, 0.99, 100), (8, 0.99, 100), (20, 0.99, 100)]
-    M = 10000
+    # after preforming few experiments, chose the best values for each plot
+    # (not strictly claiming theses are the best...)
+    best_LMS_ARGS = [(5, 0.5, 50000), (5, 0.5, 4000), (3, 0.1, 35000), (3, 0.1, 40000)]
+    best_RLS_ARGS = [(16, 0.99, 100), (16, 0.99, 100), (8, 0.99, 100), (16, 0.99, 100)]
+    M, step, offset = 10000, 8000, 10000
 
-    for k, sound in enumerate([CITY, CAFE, AIRPLANE, VACCUM]):
-        fig, axs = plt.subplots(1, 2, figsize=(16, 8))
+    for k, sound in enumerate([AIRPLANE, VACCUM, CITY, CAFE]):
+        fig, axs = plt.subplots(1, 2, figsize=(14, 6))
         signal = read_audio_file("{}/{}".format(DIR, sound))
         IP_signal = instantaneous_power(signal, M)
 
@@ -280,9 +220,9 @@ def Q5_results():
         audio1 = signal.flatten()[L1:] - predictions.flatten()
         nrdb1 = NRdb(signal[conv_idx1 + L1:], predictions[conv_idx1:])
         IP_LMS = instantaneous_power(audio1, M)
-        axs[0].plot(np.arange(IP_signal.shape[0]), IP_signal, c="blue")
-        axs[0].plot(np.arange(IP_LMS.shape[0]), IP_LMS, c="red")
-        axs[0].set_title("{}, RLS,L = {}, $\mu$ = {}, noise reduction = {}[dB]".format(sound, L1, mu, np.round(nrdb1, 3)))
+        axs[0].plot(np.arange(0, IP_signal.shape[0], step), IP_signal[::step], c="blue")
+        axs[0].plot(np.arange(0, IP_LMS.shape[0], step), IP_LMS[::step], c="red")
+        axs[0].set_title("{}, LMS,L = {}, $\mu$ = {}, noise reduction = {}[dB]".format(sound, L1, mu, np.round(nrdb1, 3)))
         axs[0].set_xlabel("sample number")
         axs[0].set_ylabel("instantaneous power [db]")
         axs[0].grid()
@@ -290,13 +230,13 @@ def Q5_results():
 
         # RLS
         L2, lam, conv_idx2 = best_RLS_ARGS[k]
-        predictions, coefficients= RLS(signal, L2, 1e-5, lam)
+        predictions, coefficients = RLS(signal, L2, 1e-5, lam)
         audio2 = signal.flatten() - predictions.flatten()
         nrdb2 = NRdb(signal[conv_idx2:], predictions[conv_idx2:])
         IP_RLS = instantaneous_power(audio2, M)
-        axs[1].plot(np.arange(IP_signal.shape[0]), IP_signal, c="blue")
-        axs[1].plot(np.arange(IP_RLS.shape[0]), IP_RLS, c="red")
-        axs[1].set_title("{}, RLS,L = {}, $\mu$ = {}, noise reduction = {}[dB]".format(sound, L1, mu, np.round(nrdb2, 3)))
+        axs[1].plot(np.arange(offset, IP_signal.shape[0]), IP_signal[offset:], c="blue")
+        axs[1].plot(np.arange(offset, IP_RLS.shape[0]), IP_RLS[offset:], c="red")
+        axs[1].set_title("{}, RLS,L = {}, $\lambda$ = {}, noise reduction = {}[dB]".format(sound, L2, lam, np.round(nrdb2, 3)))
         axs[1].set_xlabel("sample number")
         axs[1].set_ylabel("instantaneous power [db]")
         axs[1].grid()
@@ -305,34 +245,43 @@ def Q5_results():
         plt.show()
 
 
-def Q6(zvec):
-    z = _preprocess_Q6(zvec)
+def Q6(zvec, w_size=48000):
+    """
+    === NOTE ===
+    we were asked to demonstrate precision, and NOT complexity
+    due to that, this implementation is probably time consuming..
+    ============
+    this function preforms parameter fitting to the model,
+    and returns it's best estimation accordingly
+    :param zvec: input partial vector of the signal -> predicting it's next sample
+    :return: best estimation of the next possible prediction.
+    """
+    # preprocess
+    z, factor = preprocess_Q6(zvec, w_size=w_size)
     err = 10 ** 10
     znext = None
-    for L in [3, 6, 9, 20]:
-        for lam in [0.3, 0.6, 0.99]:
-            predictions, coefficients = RLS(z, L, lam=lam)
+    out_L, out_lam = 0, 0
+    # optimize over choice of model's params
+    for L in np.concatenate([np.arange(1, 22, 4), np.arange(30, 91, 10)]):
+        for lam in np.concatenate([np.linspace(0.99, 0.9999, 4)]).flatten():
+            # normalize
+            norm_signal = z / factor
+
+            # predict
+            predictions, coefficients = predictions, coefficients = RLS(norm_signal, L, lam=lam)
             N = predictions.shape[0]
-            _mse = mse(z[N // 10:], predictions[N // 10:])  # assuming that after 10% RLS will converge
-            if _mse < err:
+
+            # rescale the prediction according to the normalization factor
+            rescaled_predictions = predictions * factor
+
+            # estimate the model error
+            _mse = mse(z[N // 10:], rescaled_predictions[N // 10:])  # assuming that after 10% RLS will converge
+            if _mse < err:  # in case current MSE is the smallest so far update output value by this model
                 u = to_col_vec(predictions[-L:])
                 w = to_col_vec(coefficients[-1])
-                znext = np.matmul(u.T, w).flatten()[0]
+                znext = factor * np.matmul(u.T, w).flatten()[0]
                 err = _mse
+                out_L, out_lam = L, lam
+    print("L = {}, lambda = {}".format(out_L, out_lam))
     return znext
 
-
-def _preprocess_Q6(zvec):
-    z = np.asarray(zvec).flatten()
-    N = min(48000, z.shape[0])
-    return z[z.shape[0] - N: z.shape[0]]
-
-
-if __name__ == "__main__":
-    # Q1_sec4()
-    # Q1_sec5(False)
-    # Q2()
-    # Q3()
-    # Q4()
-    # sounds = Q5(False)
-    Q5_results()

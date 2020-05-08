@@ -30,7 +30,7 @@ def steepest_descent(w0, mu, N, alpha, sigma, L, wstar=None):
     Cn = []
     for i in np.arange(N):
         # update coefficient
-        w = w + mu * (P - np.matmul(R, w)) / 2
+        w = w + mu * (P - np.matmul(R, w))
 
         # update output err array
         if wstar is not None:
@@ -69,7 +69,7 @@ def LMS(signal: np.ndarray, mu, L):
     for n in np.arange(L, signal.shape[0]):
         # construct the estimator
         Un = np.flip(signal[n - L:n])
-        Dn_est = np.matmul(w.T, Un).flatten()[0]
+        Dn_est = np.matmul(w.T, Un, dtype=np.float64).flatten()[0]
 
         # compute estimation err
         en = signal[n][0] - Dn_est
@@ -104,7 +104,7 @@ def RLS(signal: np.ndarray, L, delta=1e-2, lam=0.99, p2_flag=False):
     for n in np.arange(L, signal.shape[0]):
         # compute the estimated value Dn
         Un = np.flip(signal[n - L:n]).reshape((L, 1))
-        Dn_est = np.matmul(w.T, Un).flatten()
+        Dn_est = np.matmul(w.T, Un, dtype=np.float64).flatten()
         estimations.append(Dn_est[0])  # add to output array
 
         # compute the estimation err
@@ -174,34 +174,12 @@ def optimal_est(alpha, sigma, L):
     return np.matmul(np.linalg.inv(R), P).flatten()
 
 
-def optimal_est_RLS(signal: np.ndarray, L, lam):
-    """
-    :param signal:
-    :param L:
-    :param lam:
-    :return:
-    """
-    if len(signal.shape) == 1:
-        signal = signal.reshape((signal.shape[0], 1))
-    coefficients = []
-
-    # initiate phy and gn
-    phy, gn = lam * np.matmul(signal[:L], signal[:L].T), lam * signal[:L] * signal[L, 0]
-    for i in np.arange(L, signal.shape[0]):
-        ui = signal[i:i - L:-1, :]
-        di = signal[i, 0]
-
-        # update phy, gn
-        phy = lam * phy + np.matmul(ui, ui.T)
-        gn = lam * gn + ui * di
-
-        # calculate the optimal estimator and add to output
-        coefficients.append(np.matmul(np.linalg.inv(phy), gn).flatten())
-
-    return coefficients
-
-
 def predict(signal: np.ndarray, w: np.ndarray):
+    """
+    :param signal: input samples
+    :param w: coefficient vector
+    :return: estimated signal (convolve with input coef vector padded with zero)
+    """
     signal, w = signal.flatten(), w.flatten()
     w = np.pad(w, (1, 0))
     prediction = ss.lfilter(w, [1], signal)
@@ -210,10 +188,11 @@ def predict(signal: np.ndarray, w: np.ndarray):
 
 # --------------- functional calculations ---------------
 def mse(z: np.ndarray, z_hat: np.ndarray):
+    """calculates mean squared err between ground truth and prediction"""
     assert z.shape[0] == z_hat.shape[0]
     z, z_hat = to_col_vec(z), to_col_vec(z_hat)
     err = np.matmul((z-z_hat).T, (z-z_hat)).flatten()[0]/(z.shape[0])
-    return  err
+    return err
 
 
 def calc_num_sample_for_t_in_freq(t, freq, tunit='s', funit='hz'):
@@ -239,21 +218,12 @@ def calc_num_sample_for_t_in_freq(t, freq, tunit='s', funit='hz'):
     return int(np.round(t * freq))
 
 
-def cum_NRdb(Z: np.ndarray, Z_hat: np.ndarray):
-    out = []
-    for i in range(1, len(Z) + 1):
-        var = np.average(Z[:i] ** 2)
-        mse = np.average((Z[:i] - Z_hat[:i]) ** 2)
-        out.append(10 * np.log10(var / mse))
-    return out
-
-
 def NRdb(Z: np.ndarray, Z_hat: np.ndarray):
     """
     calculate the NRdb as specified in ex sheet
     """
-    var = np.average(Z ** 2)
-    mse = np.average((Z - Z_hat) ** 2)
+    var = np.mean(Z ** 2)
+    mse = np.mean((Z - Z_hat) ** 2)
     return 10 * np.log10(var / mse)
 
 
@@ -351,7 +321,7 @@ def fit_mean_line(input: np.ndarray):
 
 
 def read_audio_file(path):
-    """reads audio file and normalize it's values"""
+    """reads MONO audio file and normalize it's values"""
     audio = read(path)[1]
     return normalize(audio)
 
@@ -360,7 +330,28 @@ def normalize(arr: np.ndarray):
     m1 = np.max(arr)
     m2 = np.min(arr)
     val = max(m1, abs(m2))
-    return arr / val
+    factor = 1
+    while factor < val:
+        factor *= 2
+    return arr / factor
+
+
+def preprocess_Q6(zvec, w_size):
+    """
+    clip the last second of the input vector and cast it to np.ndarray
+    :param zvec: input vector to estimate
+    :param w_size: window size
+    :return: clipped vector ndarray
+    """
+    factor = 1
+    z = np.asarray(zvec, dtype=np.float64).flatten()
+    m = max(np.max(z), abs(np.min(z)))
+    i = 1
+    while m > factor:
+        factor = 2 ** i
+        i += 1
+    N = min(w_size, z.shape[0])
+    return z[z.shape[0] - N: z.shape[0]].flatten(), factor
 
 
 def save_audio_file(path, data):
